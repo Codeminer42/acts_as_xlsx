@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
-# Axlsx is a gem or generating excel spreadsheets with charts, images and many other features. 
-# 
+# Axlsx is a gem or generating excel spreadsheets with charts, images and many other features.
+#
 # acts_as_xlsx provides integration into active_record for Axlsx.
-# 
+#
 require 'axlsx'
 
-# Adding to the Axlsx module 
+# Adding to the Axlsx module
 # @see http://github.com/randym/axlsx
 module Axlsx
   # === Overview
   # This module defines the acts_as_xlsx class method and provides to_xlsx support to both AR classes and instances
   module Ar
-    
+
     def self.included(base) # :nodoc:
       base.send :extend, ClassMethods
     end
-    
+
     # Class methods for the mixin
     module ClassMethods
 
@@ -26,8 +26,9 @@ module Axlsx
       #       class MyModel < ActiveRecord::Base
       #          acts_as_xlsx :columns=> [:id, :created_at, :updated_at], :i18n => 'activerecord.attributes'
       def acts_as_xlsx(options={})
-        cattr_accessor :xlsx_i18n, :xlsx_columns
+        cattr_accessor :xlsx_i18n, :xlsx_columns, :xlsx_humanize_column_names
         self.xlsx_i18n = options.delete(:i18n) || false
+        self.xlsx_humanize_column_names = options.delete(:humanize_column_names) || false
         self.xlsx_columns = options.delete(:columns)
         extend Axlsx::Ar::SingletonMethods
       end
@@ -61,28 +62,31 @@ module Axlsx
         row_style = p.workbook.styles.add_style(row_style) unless row_style.nil?
         header_style = p.workbook.styles.add_style(header_style) unless header_style.nil?
         i18n = self.xlsx_i18n == true ? 'activerecord.attributes' : i18n
-        sheet_name = options.delete(:name) || (i18n ? I18n.t("#{i18n}.#{table_name.underscore}") : table_name.humanize) 
+        humanize_column_names = (self.xlsx_humanize_column_names == true) || false
+        sheet_name = options.delete(:name) || (i18n ? I18n.t("#{i18n}.#{table_name.underscore}") : table_name.humanize)
         data = options.delete(:data) || [*find(:all, options)]
         data.compact!
         data.flatten!
 
         return p if data.empty?
         p.workbook.add_worksheet(:name=>sheet_name) do |sheet|
-          
+
           col_labels = if i18n
-                         columns.map { |c| I18n.t("#{i18n}.#{self.name.underscore}.#{c}") }                         
-                       else
-                         columns.map { |c| c.to_s.humanize }
-                       end
-          
+            columns.map { |c| I18n.t("#{i18n}.#{self.name.underscore}.#{c}") }
+          elsif humanize_column_names
+           columns.map { |c| c.to_s.humanize }
+          else
+           columns
+          end
+
           sheet.add_row col_labels, :style=>header_style
-          
+
           data.each do |r|
             row_data = columns.map do |c|
               if c.to_s =~ /\./
                 v = r; c.to_s.split('.').each { |method| v = v.send(method) }; v
               else
-                r.send(c)                
+                r.send(c)
               end
             end
             sheet.add_row row_data, :style=>row_style, :types=>types
